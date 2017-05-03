@@ -1,4 +1,4 @@
-# spectrify
+# spectrify.py
 Parser for Excited State calculations using Gaussian 09 (Rev. A.02) and for the convolution of simple nm-f-lists.
 The output is compatible with the LaTeX-Package pgfplots.
 
