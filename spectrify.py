@@ -35,8 +35,8 @@ def getinput(args):
                           help='threshold for <S**2> states ')
     s2_group.add_argument('--s2mult', '-m', type=int,
                           help='takes multiplicity to set <S**2>-threshold')
-    parser.add_argument('--carolin', '-cl', action='store_true',
-                        help='nimmt eine nm-oscstr-liste')
+    parser.add_argument('--xylist', '-xy', action='store_true',
+                        help='takes a simple nm osc-str list')
 
     return parser.parse_args(args)
 
@@ -83,20 +83,20 @@ if __name__ == '__main__':
     else:
         ssqtrs = 10.0**7
 
-    if args.carolin:
+    if args.xylist:
         with open(sys.argv[1]) as f:
             nstates = sum(1 for _ in f)
     else:
         with open(sys.argv[1]) as f:
             nstates = sum("Excited State" in line for line in f)
-            
+
     with open(sys.argv[1]) as f:
             lines = f.readlines()
 
     states = []
 
     i = 0
-    if args.carolin:
+    if args.xylist:
         for line in lines:
             newline = line.split()
             states.append([float(newline[0]),
