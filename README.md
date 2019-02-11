@@ -10,5 +10,6 @@ Have a look into the help menu to find the options:
 It is written to generate broadened spectra from calculated excitation energies and oscillator strengths like
 the Gaussian whitepaper http://www.gaussian.com/g_whitepap/tn_uvvisplot.htm and the cited paper (DOI: 10.1002/chir.20733) suggests.
 
-The output will have five columns, `icm eV  nm  eps f`, which represent inverse cm (cm**-1), electron volt, nanometer,
-molar attenuation coefficient ε and oscillator strength “unit”. The standard output is to `spectrum.dat`.
+The current output is only a matplotlib/pyplot spectrum that is saved if wished.
+<s>The output will have five columns, `icm eV  nm  eps f`, which represent inverse cm (cm**-1), electron volt, nanometer,
+molar attenuation coefficient ε and oscillator strength “unit”. The standard output is to `spectrum.dat`.</s>
