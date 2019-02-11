@@ -1,13 +1,17 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 import argparse
 import numpy as np
 
-# import matplotlib
+import adjustText as aT
+
+import matplotlib.patheffects as path_effects
 import matplotlib.colors as mcol
 import matplotlib.pyplot as plt
 
 # import matplotlib._color_data as mcd
+
+from scipy import interpolate
 
 
 def getinput(args):
@@ -51,51 +55,45 @@ def getinput(args):
         help=("stepsize of the spectrum in nm" "(default: 1.0)"),
     )
     parser.add_argument(
+        "--spectrum-out",
         "--out",
         "-o",
         default="spectrum.dat",
         help=("outputfile for the spectrum data " "(default: spectrum.dat)"),
     )
     parser.add_argument(
+        "--spectrum-file-extension",
+        "-ext",
+        "-end",
+        default="svg",
+        help="file extension for the saved spectrum",
+    )
+    parser.add_argument(
         "--no-save", "-nos", action="store_true", help=("to store the plot or not")
     )
-    # parser.add_argument(
-    #     "--f4pgf",
-    #     "-p",
-    #     action="store_true",
-    #     help="\draw...-cmds for pgfplots' osc. strengths",
-    # )
-    # parser.add_argument(
-    #     "--fthresh",
-    #     "-t",
-    #     default=0.0,
-    #     type=float,
-    #     help="threshold for oscillator strengths in --f4pgf",
-    # )
-    # s2_group = parser.add_mutually_exclusive_group(required=False)
-    # s2_group.add_argument(
-    #     "--s2thresh", "-c", type=float, help="threshold for <S**2> states "
-    # )
-    # s2_group.add_argument(
-    #     "--s2mult", "-m", type=int, help="takes multiplicity to set <S**2>-threshold"
-    # )
     orca_group = parser.add_mutually_exclusive_group(required=False)
     orca_group.add_argument(
-        "--orca-xy", "-oxy", nargs="*", help="takes a simple nm osc-str list"
+        "--orca-xy",
+        "-oxy",
+        nargs="*",
+        help="takes a Excited States Table from ORCA without the header",
     )
-    orca_group.add_argument(
-        "--print-s-squared",
-        "-s2",
-        action="store_true",
-        help="prints a table for gaussian files with the spin contamination",
-    )
+    # orca_group.add_argument(
+    #     "--print-s-squared",
+    #     "-s2",
+    #     action="store_true",
+    #     help="prints a table for gaussian files with the spin contamination",
+    # )
     parser.add_argument("--orca-out", "-oout", nargs="*", help="orca output files")
+    parser.add_argument(
+        "--orca-soc", "-osoc", nargs="*", help="orca output files but SOC results"
+    )
     legend_group = parser.add_mutually_exclusive_group(required=False)
     legend_group.add_argument(
         "--plot-legend",
         "-leg",
         nargs="*",
-        help="plot legend entries, orca xy first, then gaussian out",
+        help="plot legend entries, orca out > orca xy > orca soc > gaussian out",
     )
     legend_group.add_argument(
         "--no-legend",
@@ -106,6 +104,23 @@ def getinput(args):
     parser.add_argument(
         "--top-eV", "-tev", action="store_true", help="gives additional eV axis at top"
     )
+    label_group = parser.add_mutually_exclusive_group(required=False)
+    label_group.add_argument(
+        "--peak-labels", action="store_true", help="adds labels to the peaks"
+    )
+    label_group.add_argument(
+        "--peak-labels-alternative",
+        "-alt",
+        action="store_true",
+        help="alternative peak labels ... faster",
+    )
+    parser.add_argument(
+        "--fosc-threshold",
+        "-ft",
+        type=float,
+        default=0.05,
+        help="sets the oscillator strength threshold for labeling",
+    )
 
     return parser.parse_args(args)
 
@@ -114,12 +129,15 @@ def main():
     args = getinput(sys.argv[1:])
 
     excited_states = []
-    if args.orca_xy:
-        for file in args.orca_xy:
-            excited_states.append(get_orca_xy_excited_states(file))
     if args.orca_out:
         for file in args.orca_out:
             excited_states.append(get_orca_excited_states(file))
+    if args.orca_xy:
+        for file in args.orca_xy:
+            excited_states.append(get_orca_xy_excited_states(file))
+    if args.orca_soc:
+        for file in args.orca_soc:
+            excited_states.append(get_orca_soc_states(file))
     if args.gaussian_out:
         for file in args.gaussian_out:
             excited_states.append(get_gaussian_excited_states(file))
@@ -133,17 +151,17 @@ def main():
         oscillator_dist.append(tmp2)
         epsilon_dist.append(tmp3)
 
-    if not args.orca_xy:
-        cnt = 0
-        if args.print_s_squared:
-            for state_file in excited_states:
-                print(f"file {cnt}")
-                for state in state_file:
-                    add_s2 = spin_contamination_additive(1, state[-1])
-                    mix_s2 = spin_contamination_mixed(1, state[-1])
-                    add_s2 = np.around(100 * add_s2, decimals=2)
-                    mix_s2 = np.around(100 * mix_s2, decimals=2)
-                    print(f"{state} {add_s2} {mix_s2}")
+    # if not args.gaussian_out:
+    #     cnt = 0
+    #     if args.print_s_squared:
+    #         for state_file in excited_states:
+    #             print(f"file {cnt}")
+    #             for state in state_file:
+    #                 add_s2 = spin_contamination_additive(1, state[-1])
+    #                 mix_s2 = spin_contamination_mixed(1, state[-1])
+    #                 add_s2 = np.around(100 * add_s2, decimals=2)
+    #                 mix_s2 = np.around(100 * mix_s2, decimals=2)
+    #                 print(f"{state} {add_s2} {mix_s2}")
 
     nm_grid = np.array(nm_grid)
     oscillator_dist = np.array(oscillator_dist)
@@ -183,6 +201,37 @@ def get_orca_excited_states(file):
                 absorption_start = i + 5
             elif (
                 "ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS" in lines[i]
+            ):
+                absorption_end = i - 2
+                break
+
+        for line in lines[absorption_start:absorption_end]:
+            if "spin forbidden" in line:
+                continue
+            sline = line.split()
+            number = int(sline[0])
+            energy = 10 ** 7 / float(sline[1])
+            wavelength = float(sline[2])
+            oscillator_strength = float(sline[3])
+            excited_state_list.append([number, energy, wavelength, oscillator_strength])
+
+        return np.array(excited_state_list)
+
+
+def get_orca_soc_states(file):
+    with open(file, "r") as handle:
+        lines = handle.readlines()
+
+        excited_state_list = []
+        for i in range(len(lines)):
+            if (
+                "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
+                in lines[i]
+            ):
+                absorption_start = i + 5
+            elif (
+                "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS"
+                in lines[i]
             ):
                 absorption_end = i - 2
                 break
@@ -238,7 +287,7 @@ def broaden(excited_states, args):
     epsilon_multipliers = (
         10 * prefactor * eV2nm * oscillator_multipliers / standard_dev_eV
     )
-    fractions = np.array([1 / grid_point - 1 / nm_grid for grid_point in nm_list])
+    fractions = np.array([1.0 / grid_point - 1.0 / nm_grid for grid_point in nm_list])
     exponentials = np.exp(-1.0 * (eV2nm / standard_dev_eV * fractions) ** 2)
     oscillator_dist = oscillator_multipliers.dot(exponentials)
     epsilon_dist = epsilon_multipliers.dot(exponentials)
@@ -256,7 +305,9 @@ def nearest_spin(spin):
 def spin_contamination_additive(spin, s_squared):
     """ gives the contribution of the next higher contaminating state """
     # it assumes, that in spin contamination the next highest
-    # lying excited state has the greatest impact
+    # lying excited state has the greatest impact and that the
+    # mixing is additive, as with 100% CONTAMINATION one should
+    # have both states and not only the contaminating one
     #
     # <S²> = <S²> + k * <(S+1)²>
     #
@@ -269,9 +320,12 @@ def spin_contamination_additive(spin, s_squared):
 
 
 def spin_contamination_mixed(spin, s_squared):
-    """ gives the contribution of the next hugher contaminating state,
+    """ gives the contribution of the next higher contaminating state,
     but is based on a more mixing formula than the additive one above
-    (based on a discussion with Kevin Fiederling) """
+    (based on a discussion with Kevin Fiederling)
+    while the former equation was my interpretation, this seems to be
+    in accordance with a Casida paper: 10.1016/j.theochem.2009.07.036
+    """
     # it assumes, that in spin contamination the next highest
     # lying excited state has the greatest impact but also
     # that the mixing is not additive, as above
@@ -286,6 +340,80 @@ def spin_contamination_mixed(spin, s_squared):
     # by a factor of 1 + S / 2
     result = (s_squared - spin * (spin + 1)) / (2 * (spin + 1))
     return result
+
+
+# from https://stackoverflow.com/a/10739207
+def get_text_positions(x_data, y_data, text_widths, txt_height):
+    a = list(zip(y_data, x_data))
+    text_positions = y_data.copy()
+
+    for index, (y, x) in enumerate(a):
+        local_text_positions = [
+            i
+            for i in a
+            if i[0] > (y - txt_height)
+            and (abs(i[1] - x) < text_widths[index])  # * 2)
+            and i != (y, x)
+        ]
+
+        if local_text_positions:
+            sorted_ltp = sorted(local_text_positions)
+
+            if abs(sorted_ltp[0][0] - y) < txt_height:  # True == collision
+                differ = np.diff(sorted_ltp, axis=0)
+                a[index] = (sorted_ltp[-1][0] + txt_height, a[index][1])
+                text_positions[index] = sorted_ltp[-1][0] + txt_height
+
+                for k, (j, m) in enumerate(differ):
+                    # j is the vertical distance between words
+                    if j > txt_height * 2:  # if True then room to fit a word in
+                        a[index] = (sorted_ltp[k][0] + txt_height, a[index][1])
+                        text_positions[index] = sorted_ltp[k][0] + txt_height
+                        break
+
+    return text_positions
+
+
+# also from above source
+def text_plotter(
+    x_data, y_data, label_data, color_data, text_positions, axis, txt_widths, txt_height
+):
+    for x, y, label, color, t, width in zip(
+        x_data, y_data, label_data, color_data, text_positions, txt_widths
+    ):
+        text = axis.text(
+            x - width / 2, 0.5 * txt_height + t, f"{label}", rotation=0, color=color
+        )
+        # text.set_size(text.get_size() * 0.75)
+        text.set_path_effects(
+            [
+                path_effects.PathPatchEffect(
+                    edgecolor="white", linewidth=0.2, facecolor=color
+                )
+            ]
+        )
+        if 1 == 1:  # y != t:
+            # axis.arrow(
+            #     x,
+            #     t,
+            #     0,
+            #     y - t,
+            #     color="k",  # "red",
+            #     alpha=0.3,
+            #     width=0.1,  # txt_width * 0.1,
+            #     head_width=0.0,  # , txt_width,
+            #     head_length=0.0,  # txt_height * 0.5,
+            #     zorder=0,
+            #     length_includes_head=True,
+            # )
+            axis.vlines(
+                x,
+                y,
+                0.4 * txt_height + t,
+                linewidth=0.1,
+                colors=color,
+                linestyles="solid",
+            )
 
 
 def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
@@ -304,7 +432,8 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     ]
 
     # initialize the plot
-    fig, axs_f = plt.subplots()
+    fig, axs_f = plt.subplots(figsize=(6.75, 5), dpi=300)
+    # plt.rcParams.update({"font.size": 14})
 
     # if a legend is wanted, either custom legend entries
     # or simply the filenames are printed
@@ -317,6 +446,8 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
                 labels += args.orca_out
             if args.orca_xy:
                 labels += args.orca_xy
+            if args.orca_soc:
+                labels += args.orca_soc
             if args.gaussian_out:
                 labels += args.gaussian_out
 
@@ -336,11 +467,6 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     axs_f.set_xlabel("Wavelength / nm")
     axs_f.set_ylabel("Oscillator Strength f")
 
-    # create a second y axis on the right
-    axs_eps = axs_f.twinx()
-    axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
-    axs_eps.set_ylabel("Absorption $\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
-
     # create the resp. stick spectra for each spectrum
     cnt = 0
     for states in excited_states:
@@ -352,6 +478,108 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
             nm_list, oscillator_strengths, markerfmt=" ", basefmt=" "
         )
         plt.setp(stem_lines, "color", color)
+
+    # create the labels
+    if args.peak_labels:
+        texts = []
+        xs = []
+        ys = []
+        cnt = 0
+        for states in excited_states:
+            for state in states:
+                nr = state[0]
+                nm = state[2]
+                fosc = state[3]
+                if fosc > args.fosc_threshold and nm > args.xmin and nm < args.xmax:
+                    # print(f"state {nr:.0f}: {fosc} @ {nm} nm")
+                    xs.append(nm)
+                    ys.append(fosc)
+                    texts.append(plt.text(nm, fosc, int(nr), color=mpl_colors[cnt]))
+            cnt += 1
+            # print("")
+
+        xs = np.array(xs)
+        ys = np.array(ys)
+        ind = np.lexsort((ys, xs))
+        sorted_xys = zip(xs[ind], ys[ind])
+        x_from_pairs, y_from_pairs = np.array(list(sorted_xys)).T
+
+        fit_func = interpolate.interp1d(x_from_pairs, y_from_pairs)
+        x_fit = np.linspace(
+            min(x_from_pairs), max(x_from_pairs), 10000 * len(x_from_pairs)
+        )
+        y_fit = fit_func(x_fit)
+
+        aT.adjust_text(
+            texts,
+            x_fit,
+            y_fit,
+            arrowprops=dict(arrowstyle="-", color="r", lw=0.5),
+            autoalign=True,
+            # ha="center",
+            # va="bottom",
+            on_basemap=True,
+            # lim=10000,
+            force_text=(0.01, 1.0),
+            force_points=(0.01, 1.0)
+            # only_move={'points':'y', 'text':'y'}
+        )
+    elif args.peak_labels_alternative:
+        texts = []
+        xs = []
+        ys = []
+        label = []
+        label_colors = []
+        cnt = 0
+        for states in excited_states:
+            for state in states:
+                nr = state[0]
+                nm = state[2]
+                fosc = state[3]
+                if fosc > args.fosc_threshold and nm > args.xmin and nm < args.xmax:
+                    # print(f"state {nr:.0f}: {fosc} @ {nm} nm")
+                    xs.append(nm)
+                    ys.append(fosc)
+                    label.append(int(nr))
+                    label_colors.append(mpl_colors[cnt])
+            cnt += 1
+
+        # from https://stackoverflow.com/a/10739207
+        x_data = xs
+        y_data = ys
+
+        # set the bbox for the text. Increase txt_width for wider text.
+        my_renderer = aT.get_renderer(fig)
+        textvar = plt.text(x_data[0], y_data[0], label[0])
+        bla = aT.get_bboxes([textvar], my_renderer, (1, 1), ax=axs_f)
+        tmp, txt_height = np.diff(bla[0], axis=0)[0]  # * 0.75
+        textvar.remove()
+        # txt_height = 0.04 * (plt.ylim()[1] - plt.ylim()[0])
+        # txt_width = 0.02 * (plt.xlim()[1] - plt.xlim()[0])
+
+        text_widths = []
+        for x, y, lab in zip(xs, ys, label):
+            textvar = plt.text(x, y, lab)
+            bla = aT.get_bboxes([textvar], my_renderer, (1, 1), ax=axs_f)
+            text_width, tmp = np.diff(bla[0], axis=0)[0]
+            text_widths.append(text_width)  # * 0.75)
+            textvar.remove()
+
+        # get the corrected text positions, then write the text.
+        text_positions = get_text_positions(x_data, y_data, text_widths, txt_height)
+        text_plotter(
+            x_data,
+            y_data,
+            label,
+            label_colors,
+            text_positions,
+            axs_f,
+            text_widths,
+            txt_height,
+        )
+
+        if 1.05 * np.max(oscillator_dist) < max(text_positions) + 2 * txt_height:
+            axs_f.set_ylim(0, max(text_positions) + 2 * txt_height)
 
     # top axis in eV ... most probably possible in an easier way
     if args.top_eV:
@@ -381,11 +609,19 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         axs_top.set_xticklabels(positions_eV)
         axs_top.set_xlabel("Excitation energy / eV")
 
+    # create a second y axis on the right
+    axs_eps = axs_f.twinx()
+    axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
+    axs_eps.set_ylabel("Absorption $\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
+
     axs_f.legend()
-    fig.tight_layout()
+    # fig.tight_layout()
 
     if not args.no_save:
-        plt.savefig("spectra.svg", format="svg")
+        plt.savefig(
+            f"spectra.{args.spectrum_file_extension}",
+            format=args.spectrum_file_extension,
+        )
     plt.show()
 
 
@@ -394,90 +630,6 @@ def pgfdraw(arg):
     myoutput = f"\draw[blue](axis cs: {arg[0]},0) -- (axis cs: {arg[0]}, {arg[1]});"
     return myoutput
 
-
-# https://stackoverflow.com/a/44960748/6155796
-def wavelength_to_rgb(wavelength, gamma=0.8):
-    """ taken from http://www.noah.org/wiki/Wavelength_to_RGB_in_Python
-    This converts a given wavelength of light to an
-    approximate RGB color value. The wavelength must be given
-    in nanometers in the range from 380 nm through 750 nm
-    (789 THz through 400 THz).
-
-    Based on code by Dan Bruton
-    http://www.physics.sfasu.edu/astro/color/spectra.html
-    Additionally alpha value set to 0.5 outside range
-    """
-    wavelength = float(wavelength)
-    if wavelength >= 380 and wavelength <= 750:
-        A = 1.0
-    else:
-        A = 0.5
-    if wavelength < 380:
-        wavelength = 380.0
-    if wavelength > 750:
-        wavelength = 750.0
-    if wavelength >= 380 and wavelength <= 440:
-        attenuation = 0.3 + 0.7 * (wavelength - 380) / (440 - 380)
-        R = ((-(wavelength - 440) / (440 - 380)) * attenuation) ** gamma
-        G = 0.0
-        B = (1.0 * attenuation) ** gamma
-    elif wavelength >= 440 and wavelength <= 490:
-        R = 0.0
-        G = ((wavelength - 440) / (490 - 440)) ** gamma
-        B = 1.0
-    elif wavelength >= 490 and wavelength <= 510:
-        R = 0.0
-        G = 1.0
-        B = (-(wavelength - 510) / (510 - 490)) ** gamma
-    elif wavelength >= 510 and wavelength <= 580:
-        R = ((wavelength - 510) / (580 - 510)) ** gamma
-        G = 1.0
-        B = 0.0
-    elif wavelength >= 580 and wavelength <= 645:
-        R = 1.0
-        G = (-(wavelength - 645) / (645 - 580)) ** gamma
-        B = 0.0
-    elif wavelength >= 645 and wavelength <= 750:
-        attenuation = 0.3 + 0.7 * (750 - wavelength) / (750 - 645)
-        R = (1.0 * attenuation) ** gamma
-        G = 0.0
-        B = 0.0
-    else:
-        R = 0.0
-        G = 0.0
-        B = 0.0
-    return (R, G, B, A)
-
-
-###
-# the follow belongs to the above conversion function
-###
-# clim=(350,780)
-# norm = plt.Normalize(*clim)
-# wl = np.arange(clim[0],clim[1]+1,2)
-# colorlist = list(zip(norm(wl),[wavelength_to_rgb(w) for w in wl]))
-# spectralmap = mcol.LinearSegmentedColormap.from_list("spectrum", colorlist)
-#
-# fig, axs = plt.subplots(1, 1, figsize=(8,4), tight_layout=True)
-#
-# wavelengths = np.linspace(200, 1000, 1000)
-# spectrum = (5 + np.sin(wavelengths*0.1)**2) * np.exp(-0.00002*(wavelengths-600)**2)
-# plt.plot(wavelengths, spectrum, color='darkred')
-#
-# y = np.linspace(0, 6, 100)
-# X,Y = np.meshgrid(wavelengths, y)
-#
-# extent=(np.min(wavelengths), np.max(wavelengths), np.min(y), np.max(y))
-#
-# plt.imshow(X, clim=clim,  extent=extent, cmap=spectralmap, aspect='auto')
-# plt.xlabel('Wavelength (nm)')
-# plt.ylabel('Intensity')
-#
-# plt.fill_between(wavelengths, spectrum, 8, color='w')
-# plt.savefig('WavelengthColors.png', dpi=200)
-#
-# plt.show()
-###
 
 if __name__ == "__main__":
     main()
