@@ -104,23 +104,16 @@ def getinput(args):
     parser.add_argument(
         "--top-eV", "-tev", action="store_true", help="gives additional eV axis at top"
     )
-    label_group = parser.add_mutually_exclusive_group(required=False)
-    label_group.add_argument(
-        "--peak-labels", action="store_true", help="adds labels to the peaks"
-    )
-    label_group.add_argument(
-        "--peak-labels-alternative",
-        "-alt",
-        action="store_true",
-        help="alternative peak labels ... faster",
+    parser.add_argument(
+        "--peak-labels", "-label", action="store_true", help="peak labels"
     )
     parser.add_argument(
         "--peak-prefixes",
         "-pp",
         nargs="*",
-        default=False,
-        help="add prefixes to the labels, orca out > orca xy > orca soc > gaussian out ... only applies to the peak-labels-alternative"
-      )
+        default=[],
+        help="add prefixes to the labels, orca out > orca xy > orca soc > gaussian out",
+    )
     parser.add_argument(
         "--fosc-threshold",
         "-ft",
@@ -359,7 +352,7 @@ def get_text_positions(x_data, y_data, text_widths, txt_height):
             i
             for i in a
             if i[0] > (y - txt_height)
-            and (abs(i[1] - x) < text_widths[index]) # * 2)
+            and (abs(i[1] - x) < text_widths[index])  # * 2)
             and i != (y, x)
         ]
 
@@ -426,7 +419,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     ]
 
     # initialize the plot
-    fig, axs_f = plt.subplots(figsize=(6.75, 5)) # , dpi=300)
+    fig, axs_f = plt.subplots(figsize=(6.75, 5))  # , dpi=300)
     # plt.rcParams.update({"font.size": 14})
 
     # if a legend is wanted, either custom legend entries
@@ -478,50 +471,6 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         texts = []
         xs = []
         ys = []
-        cnt = 0
-        for states in excited_states:
-            for state in states:
-                nr = state[0]
-                nm = state[2]
-                fosc = state[3]
-                if fosc > args.fosc_threshold and nm > args.xmin and nm < args.xmax:
-                    # print(f"state {nr:.0f}: {fosc} @ {nm} nm")
-                    xs.append(nm)
-                    ys.append(fosc)
-                    texts.append(plt.text(nm, fosc, int(nr), color=mpl_colors[cnt]))
-            cnt += 1
-            # print("")
-
-        xs = np.array(xs)
-        ys = np.array(ys)
-        ind = np.lexsort((ys, xs))
-        sorted_xys = zip(xs[ind], ys[ind])
-        x_from_pairs, y_from_pairs = np.array(list(sorted_xys)).T
-
-        fit_func = interpolate.interp1d(x_from_pairs, y_from_pairs)
-        x_fit = np.linspace(
-            min(x_from_pairs), max(x_from_pairs), 10000 * len(x_from_pairs)
-        )
-        y_fit = fit_func(x_fit)
-
-        aT.adjust_text(
-            texts,
-            x_fit,
-            y_fit,
-            arrowprops=dict(arrowstyle="-", color="r", lw=0.5),
-            autoalign=True,
-            # ha="center",
-            # va="bottom",
-            on_basemap=True,
-            # lim=10000,
-            force_text=(0.01, 1.0),
-            force_points=(0.01, 1.0)
-            # only_move={'points':'y', 'text':'y'}
-        )
-    elif args.peak_labels_alternative:
-        texts = []
-        xs = []
-        ys = []
         label = []
         label_colors = []
         cnt = 0
@@ -537,7 +486,9 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
                     if args.peak_prefixes == []:
                         label.append(int(nr))
                     else:
-                        label.append(args.peak_prefixes[cnt] + "$_{" + str(int(nr)) + "}$")
+                        label.append(
+                            args.peak_prefixes[cnt] + "$_{" + str(int(nr)) + "}$"
+                        )
                     label_colors.append(mpl_colors[cnt])
             cnt += 1
 
