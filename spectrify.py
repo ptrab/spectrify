@@ -359,7 +359,7 @@ def get_text_positions(x_data, y_data, text_widths, txt_height):
             i
             for i in a
             if i[0] > (y - txt_height)
-            if (abs(i[1] - x) < text_widths[index]) # * 2)
+            and (abs(i[1] - x) < text_widths[index]) # * 2)
             and i != (y, x)
         ]
 
