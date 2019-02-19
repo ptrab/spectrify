@@ -115,6 +115,13 @@ def getinput(args):
         help="alternative peak labels ... faster",
     )
     parser.add_argument(
+        "--peak-prefixes",
+        "-pp",
+        nargs="*",
+        default=False,
+        help="add prefixes to the labels, orca out > orca xy > orca soc > gaussian out ... only applies to the peak-labels-alternative"
+      )
+    parser.add_argument(
         "--fosc-threshold",
         "-ft",
         type=float,
@@ -352,7 +359,7 @@ def get_text_positions(x_data, y_data, text_widths, txt_height):
             i
             for i in a
             if i[0] > (y - txt_height)
-            and (abs(i[1] - x) < text_widths[index])  # * 2)
+            if (abs(i[1] - x) < text_widths[index]) # * 2)
             and i != (y, x)
         ]
 
@@ -393,19 +400,6 @@ def text_plotter(
             ]
         )
         if 1 == 1:  # y != t:
-            # axis.arrow(
-            #     x,
-            #     t,
-            #     0,
-            #     y - t,
-            #     color="k",  # "red",
-            #     alpha=0.3,
-            #     width=0.1,  # txt_width * 0.1,
-            #     head_width=0.0,  # , txt_width,
-            #     head_length=0.0,  # txt_height * 0.5,
-            #     zorder=0,
-            #     length_includes_head=True,
-            # )
             axis.vlines(
                 x,
                 y,
@@ -432,7 +426,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     ]
 
     # initialize the plot
-    fig, axs_f = plt.subplots(figsize=(6.75, 5), dpi=300)
+    fig, axs_f = plt.subplots(figsize=(6.75, 5)) # , dpi=300)
     # plt.rcParams.update({"font.size": 14})
 
     # if a legend is wanted, either custom legend entries
@@ -540,7 +534,10 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
                     # print(f"state {nr:.0f}: {fosc} @ {nm} nm")
                     xs.append(nm)
                     ys.append(fosc)
-                    label.append(int(nr))
+                    if args.peak_prefixes == []:
+                        label.append(int(nr))
+                    else:
+                        label.append(args.peak_prefixes[cnt] + "$_{" + str(int(nr)) + "}$")
                     label_colors.append(mpl_colors[cnt])
             cnt += 1
 
