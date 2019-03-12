@@ -22,9 +22,14 @@ def getinput(args):
     parser.add_argument(
         "--gaussian-out",
         "-gout",
-        metavar="G09-Output",
         nargs="*",
         help=("Typically *.log or *.out, " "but ending doesn't matter."),
+    )
+    parser.add_argument(
+        "--gaussian-singlet-triplet",
+        "-gst",
+        action="store_true",
+        help=("sets oscillator strengths to arbitrary value to make them visible"),
     )
     parser.add_argument(
         "--hwhh",
@@ -121,6 +126,8 @@ def getinput(args):
         default=0.05,
         help="sets the oscillator strength threshold for labeling",
     )
+    parser.add_argument("--adf-out", "-aout", nargs="*", help="adf output files")
+    parser.add_argument("--adf-soc", "-asoc", nargs="*", help="adf soc state files")
 
     return parser.parse_args(args)
 
@@ -140,7 +147,20 @@ def main():
             excited_states.append(get_orca_soc_states(file))
     if args.gaussian_out:
         for file in args.gaussian_out:
-            excited_states.append(get_gaussian_excited_states(file))
+            if args.gaussian_singlet_triplet:
+                es = get_gaussian_excited_states(file)
+                tes = es.T
+                tes[3] = [0.1 for x in tes[3]]
+                es = tes.T
+                excited_states.append(es)
+            else:
+                excited_states.append(get_gaussian_excited_states(file))
+    if args.adf_out:
+        for file in args.adf_out:
+            excited_states.append(get_adf_excited_states(file))
+    if args.adf_soc:
+        for file in args.adf_soc:
+            excited_states.append(get_adf_soc_states(file))
 
     nm_grid = []
     oscillator_dist = []
@@ -168,6 +188,81 @@ def main():
     epsilon_dist = np.array(epsilon_dist)
 
     plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args)
+
+
+def get_adf_excited_states(file):
+    with open(file, "r") as handle:
+        lines = handle.readlines()
+
+    excited_state_list = []
+    nexc = 0
+    for line in lines:
+        if "lowest" in line.lower():
+            nexc = int(line.split()[-1])
+            break
+
+    cnt = 0
+    for line in lines:
+        if "All SINGLET-SINGLET excitation energies" in line:
+            # All SINGLET-SINGLET excitation energies
+            #
+            #  no.     E/a.u.        E/eV      f           Symmetry
+            #  -----------------------------------------------------
+            #    1:     0.10771      2.93087   0.9699E-01  A
+            #    0          1           2          3       4
+            for state in lines[cnt + 4 : cnt + nexc + 4]:
+                sline = state.replace(":", "").split()
+                number = int(sline[0])
+                energy = float(sline[2])
+                wavelength = 1239.841_973_862_09 / energy
+                oscillator_strength = float(sline[3])
+                excited_state_list.append(
+                    [number, energy, wavelength, oscillator_strength]
+                )
+            break
+        cnt += 1
+
+    return np.array(excited_state_list)
+
+
+def get_adf_soc_states(file):
+    with open(file, "r") as handle:
+        lines = handle.readlines()
+
+    excited_state_list = []
+    nexc = 0
+    gscorr = 0
+    for line in lines:
+        if "lowest" in line.lower():
+            nexc = 4 * int(line.split()[-1])
+        if "gscorr" in line.lower():
+            gscorr = 1
+        if "end input" in line.lower():
+            break
+    print(f"GSCORR: {gscorr}")
+
+    cnt = 0
+    for line in lines:
+        if "All Spin-Orbital Coupling Excitation Energies" in line:
+            # All Spin-Orbital Coupling Excitation Energies
+            #
+            #  no.     E/a.u.        E/eV      f           tau/s        Symmetry
+            #  ------------------------------------------------------------------
+            #    1:     0.00000      0.00000   0.3820E-07               A
+            #    0         1             2          3                   4
+            for state in lines[cnt + 4 + gscorr : cnt + nexc + 4 + gscorr]:
+                sline = state.replace(":", "").split()
+                number = int(sline[0])
+                energy = float(sline[2])
+                wavelength = 1239.841_973_862_09 / energy
+                oscillator_strength = float(sline[3])
+                excited_state_list.append(
+                    [number, energy, wavelength, oscillator_strength]
+                )
+            break
+        cnt += 1
+
+    return np.array(excited_state_list)
 
 
 def get_orca_xy_excited_states(file):
@@ -287,7 +382,7 @@ def broaden(excited_states, args):
     epsilon_multipliers = (
         10 * prefactor * eV2nm * oscillator_multipliers / standard_dev_eV
     )
-    fractions = np.array([1.0 / grid_point - 1.0 / nm_grid for grid_point in nm_list])
+    fractions = 1 / nm_list.reshape((-1, len(nm_list))).T - 1 / nm_grid
     exponentials = np.exp(-1.0 * (eV2nm / standard_dev_eV * fractions) ** 2)
     oscillator_dist = oscillator_multipliers.dot(exponentials)
     epsilon_dist = epsilon_multipliers.dot(exponentials)
@@ -303,43 +398,40 @@ def nearest_spin(spin):
 
 
 def spin_contamination_additive(spin, s_squared):
-    """ gives the contribution of the next higher contaminating state """
-    # it assumes, that in spin contamination the next highest
-    # lying excited state has the greatest impact and that the
-    # mixing is additive, as with 100% CONTAMINATION one should
-    # have both states and not only the contaminating one
-    #
-    # <S²> = <S²> + k * <(S+1)²>
-    #
-    #     <S²> - S * (S + 1)
-    # k = ------------------
-    #      (S + 1) * (S + 2)
-    #
-    result = (s_squared - spin * (spin + 1)) / ((spin + 1) * (spin + 2))
-    return result
+    """ gives the contribution of the next higher contaminating state it assumes, that
+    in spin contamination the next highest lying excited state has the greatest impact
+    and that the mixing is additive, as with 100% CONTAMINATION one should have both
+    states and not only the contaminating one
+
+    <S²> = <S²> + k * <(S+1)²>
+
+        <S²> - S * (S + 1)
+    k = ------------------
+         (S + 1) * (S + 2)
+    """
+    return (s_squared - spin * (spin + 1)) / ((spin + 1) * (spin + 2))
 
 
 def spin_contamination_mixed(spin, s_squared):
-    """ gives the contribution of the next higher contaminating state,
-    but is based on a more mixing formula than the additive one above
-    (based on a discussion with Kevin Fiederling)
-    while the former equation was my interpretation, this seems to be
-    in accordance with a Casida paper: 10.1016/j.theochem.2009.07.036
+    """ gives the contribution of the next higher contaminating state, but is based on
+    a more mixing formula than the additive one above (based on a discussion with Kevin
+    Fiederling). while the former equation was my interpretation, this seems to be in
+    accordance with a Casida paper: 10.1016/j.theochem.2009.07.036
+
+    it assumes, that in spin contamination the next highest
+    lying excited state has the greatest impact but also
+    that the mixing is not additive, as above
+
+    <S²> = (1 - k) + <S²> + k <(S+1)²>
+
+        <S²> - S * (S - 1)
+    k = ------------------
+           2 * (S + 1)
+
+    this value is always larger than the above formula
+    by a factor of 1 + S / 2
     """
-    # it assumes, that in spin contamination the next highest
-    # lying excited state has the greatest impact but also
-    # that the mixing is not additive, as above
-    #
-    # <S²> = (1 - k) + <S²> + k <(S+1)²>
-    #
-    #     <S²> - S * (S - 1)
-    # k = ------------------
-    #        2 * (S + 1)
-    #
-    # this value is always larger than the above formula
-    # by a factor of 1 + S / 2
-    result = (s_squared - spin * (spin + 1)) / (2 * (spin + 1))
-    return result
+    return (s_squared - spin * (spin + 1)) / (2 * (spin + 1))
 
 
 # from https://stackoverflow.com/a/10739207
@@ -437,6 +529,10 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
                 labels += args.orca_soc
             if args.gaussian_out:
                 labels += args.gaussian_out
+            if args.adf_out:
+                labels += args.adf_out
+            if args.adf_soc:
+                labels += args.adf_soc
 
     # plot each spectrum of the read files
     cnt = 0
