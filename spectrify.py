@@ -161,7 +161,7 @@ def getinput(args):
     parser.add_argument(
         "--exckel",
         nargs=3,
-        metavar=("Conv_FOsc", "Filtered_Peaks", "Conv_Fosc"),
+        metavar=('Conv_FOsc', 'Filtered_Peaks', 'Spectrum_Peaks'),
         help="interface for Exckel",
     )
     parser.add_argument("--exckel-grid", action="store_true", help=("grid for exckel"))
