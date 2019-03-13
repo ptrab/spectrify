@@ -6,24 +6,36 @@ import numpy as np
 import adjustText as aT
 
 import matplotlib.patheffects as path_effects
-import matplotlib.colors as mcol
+
+# import matplotlib.colors as mcol
 import matplotlib.pyplot as plt
 
 # import matplotlib._color_data as mcd
 
-from scipy import interpolate
+# from scipy import interpolate
+
+# --- General settings for STIX fonts
+# import matplotlib as mpl
+# import matplotlib.font_manager as font_manager
+# FONT_DIRS = ["/home/traber/.fonts"]
+# FONT_FILES = font_manager.findSystemFonts(fontpaths=FONT_DIRS)
+# FONT_LIST = font_manager.createFontList(FONT_FILES)
+# font_manager.fontManager.ttflist.extend(FONT_LIST)
+#
+# mpl.rcParams["font.family"] = "STIXGeneral"
+# plt.rcParams["font.size"] = 14
 
 
 def getinput(args):
     """parse the input"""
     parser = argparse.ArgumentParser(
-        description=("G09 to UV-Vis-spectrum" " converter.")
+        description=("Gaussian/ORCA/ADF to UV-Vis-spectrum converter.")
     )
     parser.add_argument(
         "--gaussian-out",
         "-gout",
         nargs="*",
-        help=("Typically *.log or *.out, " "but ending doesn't matter."),
+        help=("Typically *.log or *.out, but ending doesn't matter."),
     )
     parser.add_argument(
         "--gaussian-singlet-triplet",
@@ -36,36 +48,48 @@ def getinput(args):
         "-w",
         default=0.333,
         type=float,
-        help=("half width at half height in eV " "(default: 0.333)"),
+        help=("half width at half height in eV (default: 0.333)"),
     )
     parser.add_argument(
         "--xmin",
         "-i",
         default=280.0,
         type=float,
-        help=("minimal wavelength in nm " "(default: 280.0)"),
+        help=("minimal wavelength in nm (default: 280.0)"),
     )
     parser.add_argument(
         "--xmax",
         "-f",
         default=780.0,
         type=float,
-        help=("maximal wavelength in nm " "(default: 780.0"),
+        help=("maximal wavelength in nm (default: 780.0"),
     )
     parser.add_argument(
         "--dx",
         "-s",
         default=1.0,
         type=float,
-        help=("stepsize of the spectrum in nm" "(default: 1.0)"),
+        help=("stepsize of the spectrum in nm(default: 1.0)"),
     )
     parser.add_argument(
-        "--spectrum-out",
-        "--out",
-        "-o",
-        default="spectrum.dat",
-        help=("outputfile for the spectrum data " "(default: spectrum.dat)"),
+        "--label-xmin",
+        "-li",
+        type=float,
+        help=("minimal wavelength in nm for labeling (default: 1.1 * xmin)"),
     )
+    parser.add_argument(
+        "--label-xmax",
+        "-lf",
+        type=float,
+        help=("maximal wavelength in nm for labeling (default: 0.9 * xmax)"),
+    )
+    # parser.add_argument(
+    #     "--spectrum-out",
+    #     "--out",
+    #     "-o",
+    #     default="spectrum.dat",
+    #     help=("outputfile for the spectrum data (default: spectrum.dat)"),
+    # )
     parser.add_argument(
         "--spectrum-file-extension",
         "-ext",
@@ -75,6 +99,9 @@ def getinput(args):
     )
     parser.add_argument(
         "--no-save", "-nos", action="store_true", help=("to store the plot or not")
+    )
+    parser.add_argument(
+        "--no-plot", "-nop", action="store_trie", help=("to plot the plot or not")
     )
     orca_group = parser.add_mutually_exclusive_group(required=False)
     orca_group.add_argument(
@@ -128,12 +155,34 @@ def getinput(args):
     )
     parser.add_argument("--adf-out", "-aout", nargs="*", help="adf output files")
     parser.add_argument("--adf-soc", "-asoc", nargs="*", help="adf soc state files")
+    parser.add_argument(
+        "--exp", "-exp", default=False, nargs="*", help="experimental spectra"
+    )
+    parser.add_argument(
+        "--exckel",
+        nargs=3,
+        metavar=("Conv_FOsc", "Filtered_Peaks", "Conv_Fosc"),
+        help="interface for Exckel",
+    )
+    parser.add_argument("--exckel-grid", action="store_true", help=("grid for exckel"))
+    parser.add_argument(
+        "--exckel-color",
+        default="k",
+        help=("color for exckel spectrum in matplotlib compatible format (default: k)"),
+    )
 
     return parser.parse_args(args)
 
 
 def main():
     args = getinput(sys.argv[1:])
+
+    if args.no_save and args.no_plot:
+        sys.exit("no plot and no save ... done \(^o ^)/")
+
+    if args.exckel:
+        plot_for_exckel(args)
+        sys.exit()
 
     excited_states = []
     if args.orca_out:
@@ -495,6 +544,148 @@ def text_plotter(
             )
 
 
+def plot_for_exckel(args):
+    # input: <Conv_FOsc> <Filtered_Peaks> <Spectrum_Peaks>
+    # needs to be fed to:
+    #    plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args)
+
+    # <Conv_FOsc> contains the broadened spectrum in x y
+    conv_fosc = np.loadtxt(args.exckel[0])
+    eV_grid, oscillator_dist = conv_fosc.T
+
+    eV2nm = 1239.841_973_862_09
+    prefactor = 1.306_297_4
+    standard_dev_eV = args.hwhh / np.sqrt(np.log(2))
+
+    # calculates the epsilon distribution
+    epsilon_dist = 10 * prefactor * eV2nm * oscillator_dist / standard_dev_eV
+
+    # <Filtered_Peaks> contains the filtered peaks in x y z with z being the labels
+    filtered_peaks = np.loadtxt(args.exckel[1])
+    filtered_eV, filtered_fosc, filtered_labels = filtered_peaks.T
+    filtered_labels = filtered_labels.astype(int)
+
+    # <Spectrum_Peaks> contains all peaks in x y z with z being the labels
+    spectrum_peaks = np.loadtxt(args.exckel[2])
+    peaks_eV, peaks_fosc, peaks_labels = spectrum_peaks.T
+    peaks_labels = peaks_labels.astype(int)
+
+    # initialize the plot
+    fig, axs_f = plt.subplots(figsize=(6.75, 5))  # , dpi=300)
+
+    # grid
+    if args.exckel_grid:
+        plt.grid(b=True, which="major", axis="both")
+
+    # plot each spectrum of the read files
+    axs_f.plot(eV_grid, oscillator_dist, args.exckel_color)
+
+    # set the ranges and labels
+    axs_f.set_xlim(np.min(eV_grid), np.max(eV_grid))
+    axs_f.set_ylim(0, 1.05 * np.max(oscillator_dist))
+    axs_f.set_xlabel("Excitation energy / eV")
+    axs_f.set_ylabel("Oscillator Strength f")
+
+    # create the resp. stick spectra for each spectrum
+    stem_lines = axs_f.stem(peaks_eV, peaks_fosc, markerfmt=" ", basefmt=" ")
+    plt.setp(stem_lines, "color", args.exckel_color)
+
+    # create the labels
+    if args.peak_labels:
+        xs = []
+        ys = []
+        label = []
+        label_colors = []
+
+        for peak in spectrum_peaks:
+            nr = peak[2]
+            eV = peak[0]
+            fosc = peak[1]
+            if nr in filtered_labels:
+                xs.append(eV)
+                ys.append(fosc)
+                if args.peak_prefixes == []:
+                    label.append(int(nr))
+                else:
+                    label.append(args.peak_prefixes[0] + "$_{" + str(int(nr)) + "}$")
+                label_colors.append("k")
+
+        # from https://stackoverflow.com/a/10739207
+        x_data = xs
+        y_data = ys
+
+        # set the bbox for the text. Increase txt_width for wider text.
+        my_renderer = aT.get_renderer(fig)
+        textvar = plt.text(x_data[0], y_data[0], label[0])
+        bla = aT.get_bboxes([textvar], my_renderer, (1, 1), ax=axs_f)
+        tmp, txt_height = np.diff(bla[0], axis=0)[0]  # * 0.75
+        textvar.remove()
+        # txt_height = 0.04 * (plt.ylim()[1] - plt.ylim()[0])
+        # txt_width = 0.02 * (plt.xlim()[1] - plt.xlim()[0])
+
+        text_widths = []
+        for x, y, lab in zip(xs, ys, label):
+            textvar = plt.text(x, y, lab)
+            bla = aT.get_bboxes([textvar], my_renderer, (1, 1), ax=axs_f)
+            text_width, tmp = np.diff(bla[0], axis=0)[0]
+            text_widths.append(text_width)  # * 0.75)
+            textvar.remove()
+
+        # get the corrected text positions, then write the text.
+        text_positions = get_text_positions(x_data, y_data, text_widths, txt_height)
+        text_plotter(
+            x_data,
+            y_data,
+            label,
+            label_colors,
+            text_positions,
+            axs_f,
+            text_widths,
+            txt_height,
+        )
+
+        if 1.05 * np.max(oscillator_dist) < max(text_positions) + 2 * txt_height:
+            axs_f.set_ylim(0, max(text_positions) + 2 * txt_height)
+
+    # top axis in nm ... most probably possible in an easier way
+    #             ^^ I stick with my eV nomenclature, but it is nm now
+    #                ... inverse to my spectra :)
+    if args.top_eV:
+        # copy nm-axis
+        axs_top = axs_f.twiny()
+        # create eV value list
+        positions_eV = np.arange(0.0, 100.1, 1.0)  # eV
+        # select only nm values in the plotted range
+        positions_eV = np.array(
+            [eV for eV in positions_eV if eV > np.min(eV_grid) and eV < np.max(eV_grid)]
+        )
+        # convert them to nm
+        positions_nm = np.around(1239.841_973_862_09 / positions_eV, decimals=2)
+        # reformats the nm tick positions to be between (nm_min, 0) and (nm_max, 1)
+        positions_eV = (positions_eV - np.min(eV_grid)) / (
+            np.max(eV_grid) - np.min(eV_grid)
+        )
+        # sets the tick positions
+        axs_top.set_xticks(positions_eV)
+        # sets the values at these tick positions
+        axs_top.set_xticklabels(positions_nm)
+        axs_top.set_xlabel("Wavelength $\lambda$ / nm")
+
+    # create a second y axis on the right
+    axs_eps = axs_f.twinx()
+    axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
+    axs_eps.set_ylabel("Absorption $\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
+
+    if not args.no_save:
+        plt.savefig(
+            f"spectra.{args.spectrum_file_extension}",
+            format=args.spectrum_file_extension,
+        )
+
+    if not args.no_plot:
+        plt.show()
+
+
 def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     # xkcd_colors = list(mcd.XKCD_COLORS.values())
     mpl_colors = [
@@ -533,6 +724,8 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
                 labels += args.adf_out
             if args.adf_soc:
                 labels += args.adf_soc
+            if args.exp:
+                labels += args.exp
 
     # plot each spectrum of the read files
     cnt = 0
@@ -544,7 +737,16 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
             axs_f.plot(nm_grid[0], dist, color, label=labels[cnt])
         cnt += 1
 
-    # set the and ranges
+    # plot experimental spectra
+    if args.exp:
+        for data in args.exp:
+            if args.no_legend:
+                axs_f.plot(data[0], data[1], "k--", alpha=0.5)
+            else:
+                axs_f.plot(data[0], data[1], "k--", alpha=0.5, label=labels[cnt])
+            cnt += 1
+
+    # set the ranges and labels
     axs_f.set_xlim(np.min(nm_grid[0]), np.max(nm_grid[0]))
     axs_f.set_ylim(0, 1.05 * np.max(oscillator_dist))
     axs_f.set_xlabel("Wavelength / nm")
@@ -570,12 +772,23 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         label = []
         label_colors = []
         cnt = 0
+
+        if args.label_xmin != None:
+            label_min = args.label_xmin
+        else:
+            label_min = 1.1 * args.xmin
+
+        if args.label_xmax != None:
+            label_max = args.label_xmax
+        else:
+            label_max = 0.9 * args.xmax
+
         for states in excited_states:
             for state in states:
                 nr = state[0]
                 nm = state[2]
                 fosc = state[3]
-                if fosc > args.fosc_threshold and nm > args.xmin and nm < args.xmax:
+                if fosc > args.fosc_threshold and nm >= label_min and nm <= label_max:
                     # print(f"state {nr:.0f}: {fosc} @ {nm} nm")
                     xs.append(nm)
                     ys.append(fosc)
@@ -656,17 +869,19 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     # create a second y axis on the right
     axs_eps = axs_f.twinx()
     axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
-    axs_eps.set_ylabel("Absorption $\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
+    axs_eps.set_ylabel("Absorption $\\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
 
-    axs_f.legend()
-    # fig.tight_layout()
+    if not args.no_legend:
+        axs_f.legend()
 
     if not args.no_save:
         plt.savefig(
             f"spectra.{args.spectrum_file_extension}",
             format=args.spectrum_file_extension,
         )
-    plt.show()
+
+    if not args.no_plot:
+        plt.show()
 
 
 def pgfdraw(arg):
