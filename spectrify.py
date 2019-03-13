@@ -101,7 +101,7 @@ def getinput(args):
         "--no-save", "-nos", action="store_true", help=("to store the plot or not")
     )
     parser.add_argument(
-        "--no-plot", "-nop", action="store_trie", help=("to plot the plot or not")
+        "--no-plot", "-nop", action="store_true", help=("to plot the plot or not")
     )
     orca_group = parser.add_mutually_exclusive_group(required=False)
     orca_group.add_argument(
