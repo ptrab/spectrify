@@ -41,61 +41,58 @@ def getinput(args):
         "--gaussian-singlet-triplet",
         "-gst",
         action="store_true",
-        help=("sets oscillator strengths to arbitrary value to make them visible"),
+        help=(
+            "sets oscillator strengths to arbitrary value of 0.1 to make them visible. Mutually exclusive with regular gaussian output!"
+        ),
     )
     parser.add_argument(
-        "--hwhh",
+        "--half-width-at-half-maximum",
+        "-hwhm",
         "-w",
         default=0.333,
         type=float,
-        help=("half width at half height in eV (default: 0.333)"),
+        help=("half width at half maximum in eV (default: 0.333)"),
     )
     parser.add_argument(
-        "--xmin",
+        "--nm-min",
         "-i",
         default=280.0,
         type=float,
         help=("minimal wavelength in nm (default: 280.0)"),
     )
     parser.add_argument(
-        "--xmax",
+        "--nm-max",
         "-f",
         default=780.0,
         type=float,
         help=("maximal wavelength in nm (default: 780.0"),
     )
     parser.add_argument(
-        "--dx",
+        "--step-size",
         "-s",
+        "-dx",
         default=1.0,
         type=float,
         help=("stepsize of the spectrum in nm(default: 1.0)"),
     )
     parser.add_argument(
-        "--label-xmin",
+        "--label-nm-min",
         "-li",
         type=float,
-        help=("minimal wavelength in nm for labeling (default: 1.1 * xmin)"),
+        help=("minimal wavelength in nm for labeling (default: 1.1 * nm_min)"),
     )
     parser.add_argument(
-        "--label-xmax",
+        "--label-nm-max",
         "-lf",
         type=float,
-        help=("maximal wavelength in nm for labeling (default: 0.9 * xmax)"),
+        help=("maximal wavelength in nm for labeling (default: 0.9 * nm_max)"),
     )
-    # parser.add_argument(
-    #     "--spectrum-out",
-    #     "--out",
-    #     "-o",
-    #     default="spectrum.dat",
-    #     help=("outputfile for the spectrum data (default: spectrum.dat)"),
-    # )
     parser.add_argument(
-        "--spectrum-file-extension",
-        "-ext",
-        "-end",
-        default="svg",
-        help="file extension for the saved spectrum",
+        "--spectrum-out",
+        "--out",
+        "-o",
+        default="spectrum.svg",
+        help=("outputfile for the spectrum (default: spectrum.svg)"),
     )
     parser.add_argument(
         "--no-save", "-nos", action="store_true", help=("to store the plot or not")
@@ -161,7 +158,7 @@ def getinput(args):
     parser.add_argument(
         "--exckel",
         nargs=3,
-        metavar=('Conv_FOsc', 'Filtered_Peaks', 'Spectrum_Peaks'),
+        metavar=("Conv_FOsc", "Filtered_Peaks", "Spectrum_Peaks"),
         help="interface for Exckel",
     )
     parser.add_argument("--exckel-grid", action="store_true", help=("grid for exckel"))
@@ -169,6 +166,13 @@ def getinput(args):
         "--exckel-color",
         default="k",
         help=("color for exckel spectrum in matplotlib compatible format (default: k)"),
+    )
+    parser.add_argument(
+        "--dots-per-inch",
+        "-dpi",
+        default=100,
+        type=int,
+        help=("dpi for the exported spectrum"),
     )
 
     return parser.parse_args(args)
@@ -417,13 +421,13 @@ def broaden(excited_states, args):
     eV2nm = 1239.841_973_862_09
     prefactor = 1.306_297_4
 
-    standard_dev_eV = args.hwhh / np.sqrt(np.log(2))
-    step_size = args.dx
+    standard_dev_eV = args.half_width_at_half_maximum / np.sqrt(np.log(2))
+    step_size = args.step_size
 
     nm_list = excited_states[:, 2]
     oscillator_strengths = excited_states[:, 3]
 
-    nm_grid = np.arange(args.xmin, args.xmax + step_size / 2, step_size)
+    nm_grid = np.arange(args.nm_min, args.nm_max + step_size / 2, step_size)
     oscillator_multipliers = oscillator_strengths
     # the 10 is the result of 10 ** 8 / 10 ** 7, from which the first was given in the
     # white paper as part of the prefactor and the latter comes from the conversion
@@ -555,7 +559,7 @@ def plot_for_exckel(args):
 
     eV2nm = 1239.841_973_862_09
     prefactor = 1.306_297_4
-    standard_dev_eV = args.hwhh / np.sqrt(np.log(2))
+    standard_dev_eV = args.half_width_at_half_maximum / np.sqrt(np.log(2))
 
     # calculates the epsilon distribution
     epsilon_dist = 10 * prefactor * eV2nm * oscillator_dist / standard_dev_eV
@@ -571,7 +575,7 @@ def plot_for_exckel(args):
     peaks_labels = peaks_labels.astype(int)
 
     # initialize the plot
-    fig, axs_f = plt.subplots(figsize=(6.75, 5))  # , dpi=300)
+    fig, axs_f = plt.subplots(figsize=(6.75, 5), dpi=args.dots_per_inch)
 
     # grid
     if args.exckel_grid:
@@ -677,10 +681,7 @@ def plot_for_exckel(args):
     axs_eps.set_ylabel("Absorption $\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
 
     if not args.no_save:
-        plt.savefig(
-            f"spectra.{args.spectrum_file_extension}",
-            format=args.spectrum_file_extension,
-        )
+        plt.savefig(f"{args.spectrum_out}", format=args.spectrum_out.split(".")[-1])
 
     if not args.no_plot:
         plt.show()
@@ -702,7 +703,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     ]
 
     # initialize the plot
-    fig, axs_f = plt.subplots(figsize=(6.75, 5))  # , dpi=300)
+    fig, axs_f = plt.subplots(figsize=(6.75, 5), dpi=args.dots_per_inch)
     # plt.rcParams.update({"font.size": 14})
 
     # if a legend is wanted, either custom legend entries
@@ -773,15 +774,15 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         label_colors = []
         cnt = 0
 
-        if args.label_xmin != None:
-            label_min = args.label_xmin
+        if args.label_nm_min != None:
+            label_min = args.label_nm_min
         else:
-            label_min = 1.1 * args.xmin
+            label_min = 1.1 * args.nm_min
 
-        if args.label_xmax != None:
-            label_max = args.label_xmax
+        if args.label_nm_max != None:
+            label_max = args.label_nm_max
         else:
-            label_max = 0.9 * args.xmax
+            label_max = 0.9 * args.nm_max
 
         for states in excited_states:
             for state in states:
@@ -875,10 +876,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         axs_f.legend()
 
     if not args.no_save:
-        plt.savefig(
-            f"spectra.{args.spectrum_file_extension}",
-            format=args.spectrum_file_extension,
-        )
+        plt.savefig(f"{args.spectrum_out}", format=args.spectrum_out.split(".")[-1])
 
     if not args.no_plot:
         plt.show()
