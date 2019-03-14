@@ -738,15 +738,6 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
             axs_f.plot(nm_grid[0], dist, color, label=labels[cnt])
         cnt += 1
 
-    # plot experimental spectra
-    if args.exp:
-        for data in args.exp:
-            if args.no_legend:
-                axs_f.plot(data[0], data[1], "k--", alpha=0.5)
-            else:
-                axs_f.plot(data[0], data[1], "k--", alpha=0.5, label=labels[cnt])
-            cnt += 1
-
     # set the ranges and labels
     axs_f.set_xlim(np.min(nm_grid[0]), np.max(nm_grid[0]))
     axs_f.set_ylim(0, 1.05 * np.max(oscillator_dist))
@@ -765,7 +756,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         )
         plt.setp(stem_lines, "color", color)
 
-    # create the labels
+    # create the peak labels
     if args.peak_labels:
         texts = []
         xs = []
@@ -872,8 +863,22 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
     axs_eps.set_ylabel("Absorption $\\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
 
+    # plot experimental spectra
+    if args.exp:
+        for file in args.exp:
+            data = np.loadtxt(file).T
+            if args.no_legend:
+                axs_eps.plot(data[0], data[1] / 10 ** 4, "k--", alpha=0.5)
+            else:
+                axs_eps.plot(
+                    data[0], data[1] / 10 ** 4, "k--", alpha=0.5, label=labels[cnt]
+                )
+            cnt += 1
+
     if not args.no_legend:
-        axs_f.legend()
+        f_lines, f_labels = axs_f.get_legend_handles_labels()
+        eps_lines, eps_labels = axs_eps.get_legend_handles_labels()
+        axs_f.legend(f_lines + eps_lines, f_labels + eps_labels)
 
     if not args.no_save:
         plt.savefig(f"{args.spectrum_out}", format=args.spectrum_out.split(".")[-1])
