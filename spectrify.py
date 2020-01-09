@@ -122,7 +122,7 @@ def getinput(args):
         "--plot-legend",
         "-leg",
         nargs="*",
-        help="plot legend entries, orca out > orca xy > orca soc > gaussian out",
+        help="plot legend entries, orca out > orca xy > orca soc > gaussian out > adf out > adf soc > exp",
     )
     legend_group.add_argument(
         "--no-legend",
@@ -141,7 +141,7 @@ def getinput(args):
         "-pp",
         nargs="*",
         default=[],
-        help="add prefixes to the labels, orca out > orca xy > orca soc > gaussian out",
+        help="add prefixes to the labels, orca out > orca xy > orca soc > gaussian out > adf out > adf soc",
     )
     parser.add_argument(
         "--fosc-threshold",
@@ -174,6 +174,12 @@ def getinput(args):
         type=int,
         help=("dpi for the exported spectrum"),
     )
+    # parser.add_argument(
+    #     "--export-spectra",
+    #     "-es",
+    #     action="store_true",
+    #     help=("exports the plotted spectra to xy-files")
+    # )
 
     return parser.parse_args(args)
 
@@ -475,9 +481,9 @@ def spin_contamination_mixed(spin, s_squared):
     lying excited state has the greatest impact but also
     that the mixing is not additive, as above
 
-    <S²> = (1 - k) + <S²> + k <(S+1)²>
+    <S²> = (1 - k) <S²> + k <(S+1)²>
 
-        <S²> - S * (S - 1)
+        <S²> - S * (S + 1)
     k = ------------------
            2 * (S + 1)
 
@@ -775,6 +781,9 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         else:
             label_max = 0.9 * args.nm_max
 
+        # otherwise it could be that the label_min > label_max, which is bs
+        label_min, label_max = np.sort([label_min, label_max])
+
         for states in excited_states:
             for state in states:
                 nr = state[0]
@@ -799,7 +808,14 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
 
         # set the bbox for the text. Increase txt_width for wider text.
         my_renderer = aT.get_renderer(fig)
-        textvar = plt.text(x_data[0], y_data[0], label[0])
+
+        # show an error, if no peaks are in a label range
+        # ... one could continue without the labeling and print a warning instead ...
+        try:
+            textvar = plt.text(x_data[0], y_data[0], label[0])
+        except IndexError:
+            sys.exit("No Peaks to label. Lower Threshold with -ft?")
+
         bla = aT.get_bboxes([textvar], my_renderer, (1, 1), ax=axs_f)
         tmp, txt_height = np.diff(bla[0], axis=0)[0]  # * 0.75
         textvar.remove()
