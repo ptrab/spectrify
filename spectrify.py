@@ -68,6 +68,13 @@ def getinput(args):
         help=("maximal wavelength in nm (default: 780.0"),
     )
     parser.add_argument(
+        "--y-height",
+        "-y",
+        type=float,
+        default=0.0,
+        help="change the maximum value of the y axis"
+    )
+    parser.add_argument(
         "--step-size",
         "-s",
         "-dx",
@@ -886,6 +893,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
             txt_height,
         )
 
+        # reset left y axis height if the labels would be truncated
         if 1.05 * np.max(oscillator_dist) < max(text_positions) + 2 * txt_height:
             axs_f.set_ylim(0, max(text_positions) + 2 * txt_height)
 
@@ -917,9 +925,20 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         axs_top.set_xticklabels(positions_eV)
         axs_top.set_xlabel("Excitation energy / eV")
 
+    # change the height of the y axis to user defined value
+    if args.y_height > 0.0:
+        # calculate resize factor wrt to original value
+        _, y_height = plt.ylim()
+        y_resize_factor = args.y_height / y_height
+        # reset y_height for f axis to user defined value
+        axs_f.set_ylim(0, args.y_height)
+
     # create a second y axis on the right
     axs_eps = axs_f.twinx()
-    axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
+    if args.y_height > 0.0:
+        axs_eps.set_ylim(0, y_resize_factor * 1.05 * np.max(epsilon_dist) / 10**4)
+    else:
+        axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
     axs_eps.set_ylabel("Absorption $\\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
 
     # plot experimental spectra
