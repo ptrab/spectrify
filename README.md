@@ -15,6 +15,10 @@ the Gaussian whitepaper http://www.gaussian.com/g_whitepap/tn_uvvisplot.htm and 
 
 The current output is only a matplotlib/pyplot spectrum that is saved if wished.
 
+When I updated to python 3.9, the adjustText library failed to place the labels correctly.
+My workaround is to setup a conda environment with python 3.7.
+There it works as expected.
+
 ## Usage
 Have a look into the help menu to find the options:
 ```bash
