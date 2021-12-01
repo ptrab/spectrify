@@ -4,7 +4,8 @@ Parser for Excited State calculations using Gaussian 09/16, ORCA, and ADF:
 | Progam  | spin-free | spin-orbit |
 |---------|-----------|------------|
 | G09/G16 | `--gaussian-out`* |   |
-| ORCA    | `--orca-out` | `--orca-soc` |
+| ORCA 4  | `--orca-out` | `--orca-soc` |
+| ORCA 5  | `--orca-out` | `--orca5-soc` |
 | ADF     | `--adf-out` | `--adf-soc` |
 
 *\* for Gaussian files there exists a mutually exclusive `--gaussian-singlet-triplet` command, which reaplces all oscillator strengths with an arbitrary value of 0.1 to make them visible*
