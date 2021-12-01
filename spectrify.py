@@ -115,14 +115,17 @@ def getinput(args):
     # )
     parser.add_argument("--orca-out", "-oout", nargs="*", help="orca output files")
     parser.add_argument(
-        "--orca-soc", "-osoc", nargs="*", help="orca output files but SOC results"
+        "--orca-soc", "-osoc", nargs="*", help="orca output files, reading the SOC states"
+    )
+    parser.add_argument(
+        "--orca5-soc", "-o5soc", nargs="*", help="orca 5 output files, reading the SOC states"
     )
     legend_group = parser.add_mutually_exclusive_group(required=False)
     legend_group.add_argument(
         "--plot-legend",
         "-leg",
         nargs="*",
-        help="plot legend entries, orca out > orca xy > orca soc > gaussian out > adf out > adf soc > exp",
+        help="plot legend entries, orca out > orca xy > orca soc > orca 5 soc > gaussian out > adf out > adf soc > exp",
     )
     legend_group.add_argument(
         "--no-legend",
@@ -141,7 +144,7 @@ def getinput(args):
         "-pp",
         nargs="*",
         default=[],
-        help="add prefixes to the labels, orca out > orca xy > orca soc > gaussian out > adf out > adf soc",
+        help="add prefixes to the labels, orca out > orca xy > orca soc > orca 5 soc > gaussian out > adf out > adf soc",
     )
     parser.add_argument(
         "--fosc-threshold",
@@ -204,6 +207,9 @@ def main():
     if args.orca_soc:
         for file in args.orca_soc:
             excited_states.append(get_orca_soc_states(file))
+    if args.orca5_soc:
+        for file in args.orca5_soc:
+            excited_states.append(get_orca5_soc_states(file))
     if args.gaussian_out:
         for file in args.gaussian_out:
             if args.gaussian_singlet_triplet:
@@ -400,6 +406,41 @@ def get_orca_soc_states(file):
 
         return np.array(excited_state_list)
 
+def get_orca5_soc_states(file):
+    with open(file, "r") as handle:
+        lines = handle.readlines()
+
+        excited_state_list = []
+        for i in range(len(lines)):
+            if (
+                "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
+                in lines[i]
+            ):
+                absorption_start = i + 5
+            elif (
+                "SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS"
+                in lines[i]
+            ):
+                absorption_end = i - 2
+                break
+
+        # ---------------------------------------------------------------------------------------------------------------------
+        #                     SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS*
+        # ---------------------------------------------------------------------------------------------------------------------
+        #    State    Energy  Wavelength   fosc         T2              TX                    TY                    TZ
+        #             (cm-1)    (nm)                  (au**2)          (au)                  (au)                  (au)
+        # ---------------------------------------------------------------------------------------------------------------------
+        #    0   1   15218.8    657.1   0.000001183   0.00003 ( -0.00154,  0.00033) (  0.00145, -0.00032) (  0.00447, -0.00097)
+        #    0   1      2         3          4           5    6  7           8      9   10       11       12  13        14
+        for line in lines[absorption_start:absorption_end]:
+            sline = line.split()
+            number = int(sline[1])
+            energy = 10 ** 7 / float(sline[2])
+            wavelength = float(sline[3])
+            oscillator_strength = float(sline[4])
+            excited_state_list.append([number, energy, wavelength, oscillator_strength])
+
+        return np.array(excited_state_list)
 
 def get_gaussian_excited_states(file):
     with open(file, "r") as handle:
@@ -725,6 +766,8 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
                 labels += args.orca_xy
             if args.orca_soc:
                 labels += args.orca_soc
+            if args.orca5_soc:
+                labels += args.orca5_soc
             if args.gaussian_out:
                 labels += args.gaussian_out
             if args.adf_out:
