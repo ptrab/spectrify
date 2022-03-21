@@ -201,6 +201,7 @@ def getinput(args):
         "--linestyles",
         "-ls",
         nargs="*",
+        default=[],
         help=("specify the linestyles of the lines"),
     )
     parser.add_argument(
