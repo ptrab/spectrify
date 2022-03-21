@@ -190,6 +190,26 @@ def getinput(args):
     #     action="store_true",
     #     help=("exports the plotted spectra to xy-files")
     # )
+    parser.add_argument(
+        "--colors",
+        "-clr",
+        default=None,
+        nargs="*",
+        help=("specify your own colors in matplotlib style https://matplotlib.org/stable/tutorials/colors/colors.html"),
+    )
+    parser.add_argument(
+        "--linestyles",
+        "-ls",
+        nargs="*",
+        help=("specify the linestyles of the lines"),
+    )
+    parser.add_argument(
+        "--aspect-ratio",
+        "-ratio",
+        default=np.sqrt(2),
+        type=float,
+        help=("specify the aspect ratio of the plot (default sqrt(2))"),
+    )
 
     return parser.parse_args(args)
 
@@ -642,7 +662,7 @@ def plot_for_exckel(args):
     axs_f.set_xlim(np.min(eV_grid), np.max(eV_grid))
     axs_f.set_ylim(0, 1.05 * np.max(oscillator_dist))
     axs_f.set_xlabel("Excitation energy / eV")
-    axs_f.set_ylabel("Oscillator Strength f")
+    axs_f.set_ylabel("Oscillator Strength $f$")
 
     # create the resp. stick spectra for each spectrum
     stem_lines = axs_f.stem(peaks_eV, peaks_fosc, markerfmt=" ", basefmt=" ")
@@ -756,8 +776,11 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         "#17becf",
     ]
 
+    if args.colors:
+        mpl_colors = args.colors
+
     # initialize the plot
-    fig, axs_f = plt.subplots(figsize=(6.75, 5), dpi=args.dots_per_inch)
+    fig, axs_f = plt.subplots(figsize=(6.75, 6.75 / args.aspect_ratio), dpi=args.dots_per_inch) # figsize was 6.75 at 5 before
     # plt.rcParams.update({"font.size": 14})
 
     # if a legend is wanted, either custom legend entries
@@ -789,16 +812,22 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     for dist in oscillator_dist:
         color = mpl_colors[cnt]  # xkcd_colors[cnt]
         if args.no_legend:
-            axs_f.plot(nm_grid[0], dist, color)
+            if args.linestyles != []:
+                axs_f.plot(nm_grid[0], dist, color, linestyle=args.linestyles[cnt])
+            else:
+                axs_f.plot(nm_grid[0], dist, color)
         else:
-            axs_f.plot(nm_grid[0], dist, color, label=labels[cnt])
+            if args.linestyles != []:
+                axs_f.plot(nm_grid[0], dist, color, label=labels[cnt], linestyle=args.linestyles[cnt])
+            else:
+                axs_f.plot(nm_grid[0], dist, color, label=labels[cnt])
         cnt += 1
 
     # set the ranges and labels
     axs_f.set_xlim(np.min(nm_grid[0]), np.max(nm_grid[0]))
     axs_f.set_ylim(0, 1.05 * np.max(oscillator_dist))
     axs_f.set_xlabel("Wavelength / nm")
-    axs_f.set_ylabel("Oscillator Strength f")
+    axs_f.set_ylabel("Oscillator Strength $f$")
 
     # create the resp. stick spectra for each spectrum
     cnt = 0
@@ -957,6 +986,8 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         f_lines, f_labels = axs_f.get_legend_handles_labels()
         eps_lines, eps_labels = axs_eps.get_legend_handles_labels()
         axs_f.legend(f_lines + eps_lines, f_labels + eps_labels)
+
+    plt.tight_layout()
 
     if not args.no_save:
         plt.savefig(f"{args.spectrum_out}", format=args.spectrum_out.split(".")[-1])
