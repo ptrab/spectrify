@@ -827,7 +827,7 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     # set the ranges and labels
     axs_f.set_xlim(np.min(nm_grid[0]), np.max(nm_grid[0]))
     axs_f.set_ylim(0, 1.05 * np.max(oscillator_dist))
-    axs_f.set_xlabel("Wavelength / nm")
+    axs_f.set_xlabel("Wavelength $\lambda$ / nm")
     axs_f.set_ylabel("Oscillator Strength $f$")
 
     # create the resp. stick spectra for each spectrum
