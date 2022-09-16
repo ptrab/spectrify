@@ -496,7 +496,7 @@ def broaden(excited_states, args):
     eV2nm = 1239.841_973_862_09
     prefactor = 1.306_297_4
 
-    standard_dev_eV = args.half_width_at_half_maximum / np.sqrt(np.log(2))
+    standard_dev_eV = args.half_width_at_half_maximum / np.sqrt(2 * np.log(2))
     step_size = args.step_size
 
     nm_list = excited_states[:, 2]
