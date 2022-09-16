@@ -11,9 +11,10 @@ Parser for Excited State calculations using Gaussian 09/16, ORCA, and ADF:
 *\* for Gaussian files there exists a mutually exclusive `--gaussian-singlet-triplet` command, which reaplces all oscillator strengths with an arbitrary value of 0.1 to make them visible*
 
 Spectrify is written to generate broadened spectra from calculated excitation energies and oscillator strengths like
-the Gaussian whitepaper http://www.gaussian.com/g_whitepap/tn_uvvisplot.htm and the cited paper (DOI: 10.1002/chir.20733) suggests.
+the Gaussian whitepaper https://gaussian.com/uvvisplot/ and the cited paper (DOI: 10.1002/chir.20733) suggests.
 
 The current output is only a matplotlib/pyplot spectrum that is saved if wished.
+However, there are many ways to modify the spectrum including custom colors and line styles as available in matplotlib.
 
 When I updated to python 3.9, the adjustText library failed to place the labels correctly.
 My workaround is to setup a conda environment with python 3.7.
