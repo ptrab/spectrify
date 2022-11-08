@@ -158,12 +158,12 @@ def getinput(args):
         "-ft",
         type=float,
         default=0.05,
-        help="sets the oscillator strength threshold for labeling",
+        help="sets the oscillator strength threshold for labeling (default: 0.05)",
     )
     parser.add_argument("--adf-out", "-aout", nargs="*", help="adf output files")
     parser.add_argument("--adf-soc", "-asoc", nargs="*", help="adf soc state files")
     parser.add_argument(
-        "--exp", "-exp", default=False, nargs="*", help="experimental spectra"
+        "--exp", "-exp", default=False, nargs="*", help="add experimental spectra to the plot."
     )
     parser.add_argument(
         "--exckel",
@@ -182,7 +182,7 @@ def getinput(args):
         "-dpi",
         default=100,
         type=int,
-        help=("dpi for the exported spectrum"),
+        help=("dpi for the exported spectrum (default: 100)"),
     )
     # parser.add_argument(
     #     "--export-spectra",
@@ -210,6 +210,19 @@ def getinput(args):
         default=np.sqrt(2),
         type=float,
         help=("specify the aspect ratio of the plot (default sqrt(2))"),
+    )
+    parser.add_argument(
+        "--tertiary-axis",
+        "-tert",
+        action="store_true",
+        help="Adds a tertiary y-axis for experimental spectra's absorbance. (default: False)"
+    )
+    parser.add_argument(
+        "--y2-scale",
+        "-y2",
+        type=float,
+        default=1.0,
+        help="scales the secondary y-axis (or the tertiary y-axis if --tertiary-axis is set)."
     )
 
     return parser.parse_args(args)
@@ -962,30 +975,50 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
         y_resize_factor = args.y_height / y_height
         # reset y_height for f axis to user defined value
         axs_f.set_ylim(0, args.y_height)
-
-    # create a second y axis on the right
-    axs_eps = axs_f.twinx()
-    if args.y_height > 0.0:
-        axs_eps.set_ylim(0, y_resize_factor * 1.05 * np.max(epsilon_dist) / 10**4)
     else:
-        axs_eps.set_ylim(0, 1.05 * np.max(epsilon_dist) / 10 ** 4)
-    axs_eps.set_ylabel("Absorption $\\epsilon$ / 10$^4$ L mol$^{-1}$ cm$^{-1}$")
+        y_resize_factor = 1.0
+
+    if not args.tertiary_axis:
+        y_resize_factor = y_resize_factor * args.y2_scale
+    else:
+        y2_resize_factor = y_resize_factor * args.y2_scale
+
+    # create a secondary y axis on the right
+    axs_eps = axs_f.twinx()
+    axs_eps.set_ylim(0, y_resize_factor * 1.05 * np.max(epsilon_dist) / 10**3)
+    axs_eps.set_ylabel("Absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
+
+    if args.y2_scale != 1.0 and not args.tertiary_axis:
+        axs_eps.set_ylabel("Exp. absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
+
+    # create a tertiary y axis for experimental spectrum
+    if args.tertiary_axis:
+        axs_eps2 = axs_f.twinx()
+        axs_eps2.set_ylim(0, y2_resize_factor * 1.05 * np.max(epsilon_dist) / 10**3)
+        axs_eps2.set_ylabel("Exp. absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
+        axs_eps2.spines.right.set_position(("axes", 1.15))
+
+    if not args.tertiary_axis:
+        axs_exp = axs_eps
+    else:
+        axs_exp = axs_eps2
 
     # plot experimental spectra
     if args.exp:
         for file in args.exp:
             data = np.loadtxt(file).T
             if args.no_legend:
-                axs_eps.plot(data[0], data[1] / 10 ** 4, "k--", alpha=0.5)
+                axs_exp.plot(data[0], data[1] / 10 ** 3, "k--", alpha=0.5)
             else:
-                axs_eps.plot(
-                    data[0], data[1] / 10 ** 4, "k--", alpha=0.5, label=labels[cnt]
+                axs_exp.plot(
+                    data[0], data[1] / 10 ** 3, "k--", alpha=0.5, label=labels[cnt]
                 )
             cnt += 1
 
     if not args.no_legend:
         f_lines, f_labels = axs_f.get_legend_handles_labels()
-        eps_lines, eps_labels = axs_eps.get_legend_handles_labels()
+        # eps_lines, eps_labels = axs_eps.get_legend_handles_labels()
+        eps_lines, eps_labels = axs_exp.get_legend_handles_labels()
         axs_f.legend(f_lines + eps_lines, f_labels + eps_labels)
 
     plt.tight_layout()
