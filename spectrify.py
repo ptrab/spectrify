@@ -215,7 +215,7 @@ def getinput(args):
         "--tertiary-axis",
         "-tert",
         action="store_true",
-        help="Adds a tertiary y-axis for experimental spectra's absorbance. (default: False)"
+        help="Adds a tertiary y-axis for experimental spectra's extinction coefficient. (default: False)"
     )
     parser.add_argument(
         "--y2-height",
@@ -981,25 +981,20 @@ def plot_spectra(nm_grid, oscillator_dist, epsilon_dist, excited_states, args):
     # create a secondary y axis on the right
     axs_eps = axs_f.twinx()
     axs_eps.set_ylim(0, y_resize_factor * 1.05 * np.max(epsilon_dist) / 10**3)
-    axs_eps.set_ylabel("Absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
-
-    # if args.y2_height > 0.0 and not args.tertiary_axis:
-    #     axs_eps.set_ylabel("Exp. absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
+    axs_eps.set_ylabel("Extinction coefficient $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
 
     # create a tertiary y axis for experimental spectrum
-    if args.tertiary_axis:
+    if args.tertiary_axis and args.exp:
         axs_eps2 = axs_f.twinx()
-        # axs_eps2.set_ylabel("Exp. absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
         axs_eps2.spines.right.set_position(("axes", 1.15))
 
-    if not args.tertiary_axis:
-        axs_exp = axs_eps
-    else:
+    axs_exp = axs_eps
+    if args.tertiary_axis and args.exp:
         axs_exp = axs_eps2
 
-    if args.y2_height > 0.0:
-        axs_eps.set_ylabel("Calc. absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
-        axs_exp.set_ylabel("Exp. absorbance $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
+    if args.y2_height > 0.0 and args.exp:
+        axs_eps.set_ylabel("Calc. extinction coefficient $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
+        axs_exp.set_ylabel("Exp. extinctionc coefficient $\\epsilon$ / 10$^3$ L mol$^{-1}$ cm$^{-1}$")
         axs_exp.set_ylim(0, args.y2_height)
 
     # plot experimental spectra
