@@ -5,26 +5,24 @@ import numpy as np
 
 import adjustText as aT
 
+import matplotlib as mpl
 import matplotlib.patheffects as path_effects
 
-# import matplotlib.colors as mcol
 import matplotlib.pyplot as plt
 
-# import matplotlib._color_data as mcd
+SMALL_SIZE = 11
+MEDIUM_SIZE = 12
+BIGGER_SIZE = 13
 
-# from scipy import interpolate
+plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
-# --- General settings for STIX fonts
-# import matplotlib as mpl
-# import matplotlib.font_manager as font_manager
-# FONT_DIRS = ["/home/traber/.fonts"]
-# FONT_FILES = font_manager.findSystemFonts(fontpaths=FONT_DIRS)
-# FONT_LIST = font_manager.createFontList(FONT_FILES)
-# font_manager.fontManager.ttflist.extend(FONT_LIST)
-#
-# mpl.rcParams["font.family"] = "STIXGeneral"
-# plt.rcParams["font.size"] = 14
-
+mpl.rcParams['font.family'] = ['Noto Sans Display', 'Noto Sans', 'sans-serif']
 
 def getinput(args):
     """parse the input"""
